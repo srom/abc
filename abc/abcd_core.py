@@ -45,6 +45,10 @@ class ABCD(object):
             Returns:
               Initial set of solutions, a tf.Tensor of shape (population_size, solution_dimension)
             ```
+
+          scouting_threshold
+            Number of updates without improvement after which a solution is replaced by a new one.
+            Defaults to population_size * dimension.
         """
         if not np.isscalar(self.population_size) or self.population_size < 2:
             raise ValueError(f'Population size must be a number greater or equal to 2')
