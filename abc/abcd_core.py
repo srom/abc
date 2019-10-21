@@ -11,7 +11,7 @@ class ABCD(object):
     The main differences with the original algorithm are:
       - Solutions initialization is problem specific and left to the user
       - Updates are recombinations of existing solutions by swapping a number of dimensions.
-        Half of the dimensions are swapped at each step.
+        Half of the dimensions are swapped at each update.
 
     [1] Karaboga, Dervis. An idea based on honey bee swarm for numerical optimization.
         Vol. 200. Technical report-tr06, Erciyes university, engineering faculty,
@@ -22,13 +22,14 @@ class ABCD(object):
         """
         Args:
           population_size
-            Number of solutions to keep track of.
+            Number of "worker bees" to use during the search. The algorithm will keep track
+            of this many solutions.
 
           fitness_fn
             Function to be minimized, with following signature:
             ```
             Args:
-              x: solutions in flight, a tf.Tensor of shape (population_size, num_dimensions)
+              x: solutions in flight, a tf.Tensor of shape (population_size, solution_dimension)
 
             Returns:
               Fitness evaluations: tf.Tensor of shape (population_size,)
@@ -39,9 +40,10 @@ class ABCD(object):
             ```
             Args:
               population_size
+                Number of new solutions to initialize
 
             Returns:
-              An initial set of solutions, a tf.Tensor of shape (population_size, num_dimensions)
+              Initial set of solutions, a tf.Tensor of shape (population_size, solution_dimension)
             ```
         """
         self.population_size = population_size
@@ -50,8 +52,6 @@ class ABCD(object):
         self._initialized = False
 
     def init(self):
-
-
         self._initialized = True
         return self
 
