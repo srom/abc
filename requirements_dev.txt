@@ -1,0 +1,5 @@
+networkx
+tsplib95
+matplotlib
+seaborn
+jupyter

@@ -1,17 +1,13 @@
 import numpy as np
-import tensorflow as tf
+
+from .utils import assign_probabilities
 
 
-class ABCD(object):
+class AbstractABC(object):
     """
-    Artificial Bee Colony algorithm for Discrete optimisation (ABCD)
+    ABC: Artificial Bee Colony [1] base class.
 
-    This algorithm is a flavor of the ABC algorithm [1], adapted for discrete optimisation problems.
-
-    The main differences with the original algorithm are:
-      - Solutions initialization is problem specific and left to the user
-      - Updates are recombinations of existing solutions by swapping a number of dimensions.
-        Half of the dimensions are swapped at each update.
+    Method `update_solutions` ought to be implemented by sub classes.
 
     [1] Karaboga, Dervis. An idea based on honey bee swarm for numerical optimization.
         Vol. 200. Technical report-tr06, Erciyes university, engineering faculty,
@@ -29,10 +25,10 @@ class ABCD(object):
             Function to be minimized, with following signature:
             ```
             Args:
-              x: solutions in flight, a tf.Tensor of shape (population_size, solution_dimension)
+              x: solutions in flight, np.ndarray of shape (population_size, solution_dimension)
 
             Returns:
-              Fitness evaluations: tf.Tensor of shape (population_size,)
+              Fitness evaluations: np.ndarray of shape (population_size,)
             ```
 
           init_fn
@@ -43,14 +39,14 @@ class ABCD(object):
                 Number of new solutions to initialize
 
             Returns:
-              Initial set of solutions, a tf.Tensor of shape (population_size, solution_dimension)
+              Initial set of solutions, np.ndarray of shape (population_size, solution_dimension)
             ```
 
           scouting_threshold
             Number of updates without improvement after which a solution is replaced by a new one.
             Defaults to population_size * dimension.
         """
-        if not np.isscalar(self.population_size) or self.population_size < 2:
+        if not np.isscalar(population_size) or population_size < 2:
             raise ValueError(f'Population size must be a number greater or equal to 2')
         elif not callable(fitness_fn):
             raise ValueError(f'Fitness function function must be callable')
@@ -70,19 +66,30 @@ class ABCD(object):
         if self._initialized:
             raise ValueError('Already initialized - call reset method to start over')
 
-        solutions = self.init_fn(self.population_size)
+        self.solutions = self.init_fn(self.population_size)
 
-        shape = tf.shape(solutions).numpy()
+        shape = self.solutions.shape
         num_solutions = shape[0]
         self.dimension = shape[1]
 
         if num_solutions != self.population_size:
             raise ValueError(f'Expected {self.population_size} solutions but got {num_solutions}')
 
-        self.solutions = tf.Variable(solutions)
-        self.fitness_evaluations = tf.Variable(self.fitness_fn(solutions))
-        self.ordered_indices = tf.Variable(tf.argsort(fitness_evaluations))
+        self.fitness_evaluations = self.fitness_fn(self.solutions)
+        self.ordered_indices = np.argsort(self.fitness_evaluations)
         self.no_update_counts = np.zeros(self.population_size, dtype=np.int32)
+
+        half_pop = int(np.ceil(self.population_size / 2))
+        weights = np.log(half_pop + 0.5) - np.log(list(range(1, half_pop + 1)))
+        weights = np.concatenate([weights, np.zeros((self.population_size - half_pop,))])
+        self.onlooker_probabilities = weights / np.sum(weights)
+        self.selection_probabilities = assign_probabilities(
+            self.onlooker_probabilities,
+            self.ordered_indices,
+        )
+
+        self.population_indices = list(range(self.population_size))
+        self.dimension_indices = list(range(self.dimension))
 
         if self.scouting_threshold is None:
             self.scouting_threshold = self.population_size * self.dimension
@@ -96,10 +103,10 @@ class ABCD(object):
         return self.init()
 
     def best_solution(self):
-        return self.solutions[self.ordered_indices[0]].read_value().numpy()
+        return self.solutions[self.ordered_indices[0]]
 
     def best_fitness(self):
-        return self.fitness_fn(self.solutions[self.ordered_indices[:1]])[0].numpy()
+        return self.fitness_evaluations[self.ordered_indices[0]]
 
     def search(self, max_generations):
         if not self._initialized:
@@ -114,33 +121,24 @@ class ABCD(object):
         return self.best_solution(), self.best_fitness()
 
     def forage_with_employed_bees(self):
-        indices = list(range(self.population_size))
-        self.update_solutions(indices)
+        self.search_for_improved_solutions(self.population_indices)
 
     def forage_with_onlooker_bees(self):
-        pop = tf.cast(self.population_size, tf.float64)
-        weights = tf.math.log(pop + 0.5) - tf.math.log(tf.range(1, pop + 1))
-        probabilities = (weights / tf.reduce_sum(weights)).numpy()
-
-        sorted_probabilities = np.zeros((self.population_size,))
-        for i, idx in enumerate(self.ordered_indices.numpy()):
-            sorted_probabilities[idx] = probabilities[i]
-
         indices = np.random.choice(
-            list(range(self.population_size)),
-            p=sorted_probabilities,
+            self.population_indices,
+            p=self.selection_probabilities,
             size=self.population_size,
         )
-        self.update_solutions(indices)
+        self.search_for_improved_solutions(indices)
 
     def scout_for_new_food_sources(self):
         """
-        Solutions that haven't improved in the last 'self.limit' cycles are
+        Solutions that haven't improved in the last `scouting_threshold` updates are
         replaced by new ones, except if the solution is the best one so far.
         """
-        best_idx = self.ordered_indices[0].numpy()
+        best_idx = self.ordered_indices[0]
         new_solutions_indices = []
-        for i in range(self.population_number):
+        for i in self.population_indices:
             if i == best_idx:
                 continue
             elif self.no_update_counts[i] > self.scouting_threshold:
@@ -150,47 +148,34 @@ class ABCD(object):
             new_solutions = self.init_fn(len(new_solutions_indices))
             new_fitness_evals = self.fitness_fn(new_solutions)
 
-            for i in new_solutions_indices:
-                self.solutions[i].assign(new_solutions[i])
-                self.fitness_evaluations[i].assign(new_fitness_evals[i])
-                self.no_update_counts[i] = 0
+            for i, idx in enumerate(new_solutions_indices):
+                self.solutions[idx] = new_solutions[i]
+                self.fitness_evaluations[idx] = new_fitness_evals[i]
+                self.no_update_counts[idx] = 0
 
-            self.ordered_indices.assign(tf.argsort(self.fitness_evaluations))
+            self.ordered_indices = np.argsort(self.fitness_evaluations)
+            self.selection_probabilities = assign_probabilities(
+                self.onlooker_probabilities,
+                self.ordered_indices,
+            )
 
-    def update_solutions(self, indices):
-        new_solutions = tf.zeros((len(indices),), dtype=self.solutions.dtype)
-        for i in indices:
-            j = self.get_a_random_solution_index(i)
-            new_solution = self.swap_dimensions(i, j)
-            new_solutions[i] = new_solution
-
+    def search_for_improved_solutions(self, solution_indices_to_update):
+        new_solutions = self.update_solutions(solution_indices_to_update)
         new_fitness_evals = self.fitness_fn(new_solutions)
 
-        for i in range(self.population_size):
-            if self.fitness_evaluations[i] > new_fitness_evals[i]:
-                self.solutions[i].assign(new_solutions[i])
-                self.fitness_evaluations[i].assign(new_fitness_evals[i])
+        for c, i in enumerate(solution_indices_to_update):
+            if self.fitness_evaluations[i] > new_fitness_evals[c]:
+                self.solutions[i] = new_solutions[c]
+                self.fitness_evaluations[i] = new_fitness_evals[c]
             else:
                 self.no_update_counts[i] += 1
 
-        self.ordered_indices.assign(tf.argsort(self.fitness_evaluations))
-
-    def get_a_random_solution_index(self, current_solution_index):
-        random_index = current_solution_index
-        while random_index == current_solution_index:
-            random_index = np.random.randint(0, self.population_size)
-
-        return random_index
-
-    def swap_dimensions(solution_index_i, solution_index_j, how_much=0.5):
-        dimensions = np.random.choice(
-            list(range(self.dimension)),
-            int(np.ceil(how_much * self.dimension)),
+        self.ordered_indices = np.argsort(self.fitness_evaluations)
+        self.selection_probabilities = assign_probabilities(
+            self.onlooker_probabilities,
+            self.ordered_indices,
         )
 
-        solution1 = tf.identity(self.solutions[solution_index_i].read_value())
-        solution2 = tf.identity(self.solutions[solution_index_j].read_value())
-
-        solution1[dimensions] = solution2[dimensions]
-
-        return solution1
+    def update_solutions(self, solution_indices_to_update):
+        msg = 'Method update_solutions is problem specific and ought to be sub-classed'
+        raise NotImplementedError(msg)
