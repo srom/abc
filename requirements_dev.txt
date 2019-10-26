@@ -1,3 +1,4 @@
+nose
 networkx
 tsplib95
 matplotlib

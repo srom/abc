@@ -29,9 +29,11 @@ def uniform_init(bounds):
         ndim = np.ndim(bounds)
         raise ValueError(f'Bounds must be a 2D array but got an array of dim {ndim}')
 
+    dimensions = len(bounds)
+    min_bounds = np.array([b[0] for b in bounds])
+    max_bounds = np.array([b[1] for b in bounds])
+
     def init_fn(population_size):
-        min_ = np.array([b[0] for b in bounds])
-        max_ = np.array([b[1] for b in bounds])
-        return np.random.uniform(min_, max_, size=(population_size, len(bounds)))
+        return np.random.uniform(min_bounds, max_bounds, size=(population_size, dimensions))
 
     return init_fn

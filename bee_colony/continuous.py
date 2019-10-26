@@ -65,9 +65,8 @@ class ABC(AbstractABC):
             ndim = np.ndim(enforce_bounds)
             raise ValueError(f'Bounds must be a 2D array but got an array of dim {ndim}')
 
-        self._enforce_bounds = False
-        if enforce_bounds is not None:
-            self._enforce_bounds = True
+        self._enforce_bounds = enforce_bounds is not None
+        if self._enforce_bounds:
             self._clip_min = np.array([m[0] for m in enforce_bounds])
             self._clip_max = np.array([m[1] for m in enforce_bounds])
 

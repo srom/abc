@@ -82,9 +82,9 @@ class AbstractABC(object):
         half_pop = int(np.ceil(self.population_size / 2))
         weights = np.log(half_pop + 0.5) - np.log(list(range(1, half_pop + 1)))
         weights = np.concatenate([weights, np.zeros((self.population_size - half_pop,))])
-        self.onlooker_probabilities = weights / np.sum(weights)
-        self.selection_probabilities = assign_probabilities(
-            self.onlooker_probabilities,
+        self.normalized_weights = weights / np.sum(weights)
+        self.onlooker_probabilities = assign_probabilities(
+            self.normalized_weights,
             self.ordered_indices,
         )
 
@@ -126,7 +126,7 @@ class AbstractABC(object):
     def forage_with_onlooker_bees(self):
         indices = np.random.choice(
             self.population_indices,
-            p=self.selection_probabilities,
+            p=self.onlooker_probabilities,
             size=self.population_size,
         )
         self.search_for_improved_solutions(indices)
@@ -154,8 +154,8 @@ class AbstractABC(object):
                 self.no_update_counts[idx] = 0
 
             self.ordered_indices = np.argsort(self.fitness_evaluations)
-            self.selection_probabilities = assign_probabilities(
-                self.onlooker_probabilities,
+            self.onlooker_probabilities = assign_probabilities(
+                self.normalized_weights,
                 self.ordered_indices,
             )
 
@@ -167,12 +167,13 @@ class AbstractABC(object):
             if self.fitness_evaluations[i] > new_fitness_evals[c]:
                 self.solutions[i] = new_solutions[c]
                 self.fitness_evaluations[i] = new_fitness_evals[c]
+                self.no_update_counts[i] = 0
             else:
                 self.no_update_counts[i] += 1
 
         self.ordered_indices = np.argsort(self.fitness_evaluations)
-        self.selection_probabilities = assign_probabilities(
-            self.onlooker_probabilities,
+        self.onlooker_probabilities = assign_probabilities(
+            self.normalized_weights,
             self.ordered_indices,
         )
 
