@@ -14,7 +14,14 @@ class AbstractABC(object):
         computer engineering department, 2005.
     """
 
-    def __init__(self, population_size, fitness_fn, init_fn, scouting_threshold=None):
+    def __init__(
+        self,
+        population_size,
+        fitness_fn,
+        init_fn,
+        scouting_threshold=None,
+        termination_threshold=1e-12,
+    ):
         """
         Args:
           population_size
@@ -45,6 +52,10 @@ class AbstractABC(object):
           scouting_threshold
             Number of updates without improvement after which a solution is replaced by a new one.
             Defaults to population_size * dimension.
+
+          termination_threshold
+            Stop if |best_fitness - worse_fitness| < termination_threshold
+            Defaults to 1e-12
         """
         if not np.isscalar(population_size) or population_size < 2:
             raise ValueError(f'Population size must be a number greater or equal to 2')
@@ -60,6 +71,7 @@ class AbstractABC(object):
         self.fitness_fn = fitness_fn
         self.init_fn = init_fn
         self.scouting_threshold = scouting_threshold
+        self.termination_threshold = termination_threshold
         self._initialized = False
 
     def init(self):
@@ -117,6 +129,9 @@ class AbstractABC(object):
             self.forage_with_employed_bees()
             self.forage_with_onlooker_bees()
             self.scout_for_new_food_sources()
+
+            if self.should_terminate():
+                break
 
         return self.best_solution(), self.best_fitness()
 
@@ -180,3 +195,8 @@ class AbstractABC(object):
     def update_solutions(self, solution_indices_to_update):
         msg = 'Method update_solutions is problem specific and ought to be sub-classed'
         raise NotImplementedError(msg)
+
+    def should_terminate(self):
+        best_fitness = self.fitness_evaluations[self.ordered_indices[0]]
+        worse_fitness = self.fitness_evaluations[self.ordered_indices[-1]]
+        return np.abs(best_fitness - worse_fitness) < self.termination_threshold

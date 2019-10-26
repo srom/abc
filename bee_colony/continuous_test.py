@@ -20,6 +20,7 @@ class TestArtificialBeeColony(unittest.TestCase):
             """
             return x[:,0]**2
 
+        max_generations = 50
         bounds = [[-5, 5]]
 
         abc = ABC(
@@ -27,7 +28,7 @@ class TestArtificialBeeColony(unittest.TestCase):
             fitness_fn=fitness_fn,
             init_fn=uniform_init(bounds)
         )
-        best_solution, best_fitness = abc.search(50)
+        best_solution, best_fitness = abc.search(max_generations)
 
         # Solution array should be one dimensional
         self.assertEqual(1, len(best_solution))
@@ -51,6 +52,7 @@ class TestArtificialBeeColony(unittest.TestCase):
                 (-4 + 4 * x[:,1]**2) * x[:,1]**2
             )
 
+        max_generations = 100
         bounds = [[-3, 3], [-2, 2]]
 
         abc = ABC(
@@ -58,7 +60,7 @@ class TestArtificialBeeColony(unittest.TestCase):
             fitness_fn=fitness_fn,
             init_fn=uniform_init(bounds)
         )
-        (x1, x2), best_fitness = abc.search(100)
+        (x1, x2), best_fitness = abc.search(max_generations)
 
         # Assert global minimum has been reached
         cond = (

@@ -19,6 +19,7 @@ class ABC(AbstractABC):
         fitness_fn,
         init_fn,
         scouting_threshold=None,
+        termination_threshold=1e-12,
         enforce_bounds=None
     ):
         """
@@ -52,12 +53,22 @@ class ABC(AbstractABC):
             Number of updates without improvement after which a solution is replaced by a new one.
             Defaults to population_size * dimension.
 
+          termination_threshold
+            Stop if |best_fitness - worse_fitness| < termination_threshold
+            Defaults to 1e-12
+
           enforce_bounds
             2D list, the min and max for each dimension, e.g. [[-1, 1], [None, 2], [0, 1]].
             Ensures the fitness function is never called with out of bounds values.
             Defaults to not enforcing bounds.
         """
-        super().__init__(population_size, fitness_fn, init_fn, scouting_threshold)
+        super().__init__(
+            population_size,
+            fitness_fn,
+            init_fn,
+            scouting_threshold,
+            termination_threshold,
+        )
 
         if enforce_bounds is not None and not isinstance(enforce_bounds, (np.ndarray, list)):
             raise ValueError('Bounds must be a list or numpy array')
