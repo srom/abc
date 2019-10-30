@@ -18,9 +18,10 @@ class ABC(AbstractABC):
         population_size,
         fitness_fn,
         init_fn,
+        callback_fn=None,
         scouting_threshold=None,
         termination_threshold=1e-12,
-        enforce_bounds=None
+        enforce_bounds=None,
     ):
         """
         Args:
@@ -49,6 +50,16 @@ class ABC(AbstractABC):
               Initial set of solutions, np.ndarray of shape (population_size, solution_dimension)
             ```
 
+          callback_fn
+            User defined function called first after initialization, then at the end of each
+            generation. Intended for logging purpose.
+            Function ought to have the following signature:
+            ```
+            Args:
+              abc: the parent ABC instance (i.e. self)
+              logger: a python Logger instance
+            ```
+
           scouting_threshold
             Number of updates without improvement after which a solution is replaced by a new one.
             Defaults to population_size * dimension.
@@ -66,6 +77,7 @@ class ABC(AbstractABC):
             population_size,
             fitness_fn,
             init_fn,
+            callback_fn,
             scouting_threshold,
             termination_threshold,
         )

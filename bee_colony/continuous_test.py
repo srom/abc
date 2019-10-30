@@ -55,10 +55,17 @@ class TestArtificialBeeColony(unittest.TestCase):
         max_generations = 100
         bounds = [[-3, 3], [-2, 2]]
 
+        def callback_fn(abc, logger):
+            if abc.generation == 0:
+                abc.hi = 'hello'
+            elif abc.generation == 10:
+                abc.he = 'ho'
+
         abc = ABC(
             population_size=10,
             fitness_fn=fitness_fn,
-            init_fn=uniform_init(bounds)
+            init_fn=uniform_init(bounds),
+            callback_fn=callback_fn,
         )
         (x1, x2), best_fitness = abc.search(max_generations)
 
@@ -76,6 +83,10 @@ class TestArtificialBeeColony(unittest.TestCase):
         self.assertTrue(cond)
 
         self.assertTrue(np.isclose(best_fitness, -1.0316, rtol=1e-3))
+
+        # Assert callback function is called
+        self.assertEqual('hello', abc.hi)
+        self.assertEqual('ho', abc.he)
 
     def test_schwefel_fn(self):
 

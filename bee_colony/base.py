@@ -1,6 +1,11 @@
+import logging
+
 import numpy as np
 
 from .utils import assign_probabilities
+
+
+logger = logging.getLogger(__name__)
 
 
 class AbstractABC(object):
@@ -19,6 +24,7 @@ class AbstractABC(object):
         population_size,
         fitness_fn,
         init_fn,
+        callback_fn=None,
         scouting_threshold=None,
         termination_threshold=1e-12,
     ):
@@ -49,6 +55,16 @@ class AbstractABC(object):
               Initial set of solutions, np.ndarray of shape (population_size, solution_dimension)
             ```
 
+          callback_fn
+            User defined function called first after initialization, then at the end of each
+            generation. Intended for logging purpose.
+            Function ought to have the following signature:
+            ```
+            Args:
+              abc: the parent ABC instance (i.e. self)
+              logger: a python Logger instance
+            ```
+
           scouting_threshold
             Number of updates without improvement after which a solution is replaced by a new one.
             Defaults to population_size * dimension.
@@ -65,6 +81,8 @@ class AbstractABC(object):
             raise ValueError(f'Init function function must be callable')
         elif scouting_threshold is not None and scouting_threshold < 2:
             raise ValueError(f'Scouting threshold must be a number greater or equal to 2')
+        elif callback_fn is not None and not callable(callback_fn):
+            raise ValueError(f'Callback function must be callable')
 
         self.generation = 0
         self.population_size = population_size
@@ -72,6 +90,7 @@ class AbstractABC(object):
         self.init_fn = init_fn
         self.scouting_threshold = scouting_threshold
         self.termination_threshold = termination_threshold
+        self.callback_fn = callback_fn
         self._initialized = False
 
     def init(self):
@@ -95,10 +114,6 @@ class AbstractABC(object):
         weights = np.log(half_pop + 0.5) - np.log(list(range(1, half_pop + 1)))
         weights = np.concatenate([weights, np.zeros((self.population_size - half_pop,))])
         self.normalized_weights = weights / np.sum(weights)
-        self.onlooker_probabilities = assign_probabilities(
-            self.normalized_weights,
-            self.ordered_indices,
-        )
 
         self.population_indices = list(range(self.population_size))
         self.dimension_indices = list(range(self.dimension))
@@ -124,13 +139,23 @@ class AbstractABC(object):
         if not self._initialized:
             self.init()
 
+        # Call user defined function at generation 0
+        if self.callback_fn is not None:
+            self.callback_fn(self, logger)
+
         for _ in range(max_generations):
             self.generation += 1
             self.forage_with_employed_bees()
             self.forage_with_onlooker_bees()
             self.scout_for_new_food_sources()
 
-            if self.should_terminate():
+            self.termination_criterion_met = self.should_terminate()
+
+            # Call user defined function last
+            if self.callback_fn is not None:
+                self.callback_fn(self, logger)
+
+            if self.termination_criterion_met:
                 break
 
         return self.best_solution(), self.best_fitness()
@@ -139,9 +164,13 @@ class AbstractABC(object):
         self.search_for_improved_solutions(self.population_indices)
 
     def forage_with_onlooker_bees(self):
+        onlooker_probabilities = assign_probabilities(
+            self.normalized_weights,
+            self.ordered_indices,
+        )
         indices = np.random.choice(
             self.population_indices,
-            p=self.onlooker_probabilities,
+            p=onlooker_probabilities,
             size=self.population_size,
         )
         self.search_for_improved_solutions(indices)
@@ -169,10 +198,6 @@ class AbstractABC(object):
                 self.no_update_counts[idx] = 0
 
             self.ordered_indices = np.argsort(self.fitness_evaluations)
-            self.onlooker_probabilities = assign_probabilities(
-                self.normalized_weights,
-                self.ordered_indices,
-            )
 
     def search_for_improved_solutions(self, solution_indices_to_update):
         new_solutions = self.update_solutions(solution_indices_to_update)
@@ -187,10 +212,6 @@ class AbstractABC(object):
                 self.no_update_counts[i] += 1
 
         self.ordered_indices = np.argsort(self.fitness_evaluations)
-        self.onlooker_probabilities = assign_probabilities(
-            self.normalized_weights,
-            self.ordered_indices,
-        )
 
     def update_solutions(self, solution_indices_to_update):
         msg = 'Method update_solutions is problem specific and ought to be sub-classed'
